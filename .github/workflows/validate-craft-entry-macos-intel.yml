@@ -1,0 +1,60 @@
+name: Validate folder entry fixtures on macOS Intel
+on:
+  push:
+    branches: [validation/craft-entry-macos-intel-20261120]
+permissions:
+  contents: read
+jobs:
+  check:
+    runs-on: macos-26-intel
+    timeout-minutes: 60
+    env:
+      CARGO_TERM_COLOR: never
+      CARGO_INCREMENTAL: 0
+      CARGO_PROFILE_DEV_DEBUG: 0
+      CARGO_PROFILE_TEST_DEBUG: 0
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          repository: Afloat16/craft-anything
+          ref: 36dcc8b264d468a0f22d2854c6d73cc8cfceda15
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Install Rust
+        run: |
+          rustup toolchain install 1.100.0 --profile minimal --no-self-update --component clippy --component rustfmt
+          rustup default 1.100.0
+          rustc --version
+      - name: Verify format
+        run: cargo fmt --all --check
+      - name: Reproduce macOS fixture failure at prior PR head
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          git show a12323c86347bd320eb80d40fbeaf23c7f7df1b7:crates/engine/src/tools/artifact_tools.rs > crates/engine/src/tools/artifact_tools.rs
+          set +e
+          cargo test --locked -j 2 -p craft-anything-engine --lib non_utf8_entry_names_ -- --nocapture > /tmp/craft-fixture-baseline.log 2>&1
+          result=$?
+          set -e
+          cat /tmp/craft-fixture-baseline.log
+          git restore crates/engine/src/tools/artifact_tools.rs
+          test "$result" -eq 101
+          node -e 'const s=require("node:fs").readFileSync("/tmp/craft-fixture-baseline.log","utf8"); if(!s.includes("test result: FAILED. 1 passed; 2 failed;")) throw new Error("expected exactly two fixture failures");'
+      - name: Run entry-name and artifact-tool coverage
+        shell: bash
+        run: |
+          cargo test --locked -j 2 -p craft-anything-engine --lib non_utf8_entry_names_ -- --nocapture 2>&1 | tee /tmp/craft-fixture-fixed.log
+          node -e 'const s=require("node:fs").readFileSync("/tmp/craft-fixture-fixed.log","utf8"); const n=process.platform==="darwin"?1:3; if(!s.includes("test result: ok. "+n+" passed; 0 failed;")) throw new Error("entry-name test count changed");'
+          cargo test --locked -j 2 -p craft-anything-engine --lib tools::artifact_tools:: -- --test-threads=2
+      - name: Engine clippy
+        run: cargo clippy --locked -j 2 -p craft-anything-engine --all-targets -- -D warnings
+      - name: Architecture and source gates
+        run: |
+          cargo xtask layers
+          cargo xtask locks
+          cargo xtask secrets
+      - name: Verify clean source
+        run: |
+          cargo fmt --all --check
+          git diff --exit-code
+          git diff --check
