@@ -1,0 +1,51 @@
+name: Validate polling framework bindings
+
+on:
+  push:
+    branches: [validation/landmines-poll-bindings-20261119]
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          repository: Afloat16/landmines
+          ref: 87003c4cb4b257d8298870bc7d3016587da28d2d
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
+        with:
+          bun-version: 1.4.3
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version: 24
+      - run: bun install --frozen-lockfile
+      - name: Prove binding regressions fail on unchanged production code
+        shell: bash
+        run: |
+          git show 79e91992952c14b0c217b403fa416024c1929afe:packages/landmines/src/rules/no-unsignaled-poll.ts > packages/landmines/src/rules/no-unsignaled-poll.ts
+          set +e
+          bun run --cwd packages/landmines test src/rules/no-unsignaled-poll.test.ts --reporter=json --outputFile=/tmp/poll-baseline.json
+          result=$?
+          set -e
+          git checkout -- packages/landmines/src/rules/no-unsignaled-poll.ts
+          test "$result" -eq 1
+          node -e 'const r=require("/tmp/poll-baseline.json"); const failed=r.testResults.flatMap(s=>s.assertionResults).filter(t=>t.status==="failed"); if(r.numFailedTests!==10 || failed.some(t=>!t.fullName.includes("named import aliases") && !t.fullName.includes("shadowed bindings"))) throw new Error(JSON.stringify(r)); console.log(JSON.stringify({failed:r.numFailedTests,passed:r.numPassedTests,failures:failed.map(t=>t.fullName)},null,2));'
+      - name: Format check
+        shell: bash
+        run: |
+          if ! bun run format:check; then
+            bun run format
+            git diff
+            exit 1
+          fi
+      - run: bun run lint
+      - run: bun run typecheck
+      - run: bun run build
+      - run: bun run test
+      - run: git diff --exit-code
