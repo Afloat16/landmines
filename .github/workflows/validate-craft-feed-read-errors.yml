@@ -1,0 +1,117 @@
+name: Validate conversation read failure preservation
+on:
+  push:
+    branches: [validation/craft-feed-read-errors-20261120]
+permissions:
+  contents: read
+jobs:
+  check:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    env:
+      CARGO_TERM_COLOR: never
+      CARGO_INCREMENTAL: 0
+      CARGO_PROFILE_DEV_DEBUG: 0
+      CARGO_PROFILE_TEST_DEBUG: 0
+      CARGO_TARGET_DIR: target/agent-feed-save
+      SOURCE_SHA: 25bc4982a97dc1c516996ef82cabb59d3395b6ac
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          repository: Afloat16/craft-anything
+          ref: 25bc4982a97dc1c516996ef82cabb59d3395b6ac
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Verify exact source and real permission enforcement
+        shell: bash
+        run: |
+          test "$(git rev-parse HEAD)" = "$SOURCE_SHA"
+          test "$(id -u)" -ne 0
+          python3 - <<'PY'
+          import os
+          import pathlib
+          import tempfile
+          with tempfile.TemporaryDirectory() as folder:
+              path = pathlib.Path(folder) / "feed.json"
+              path.write_bytes(b"saved conversation")
+              path.chmod(0o200)
+              try:
+                  path.read_bytes()
+              except PermissionError:
+                  print(f"uid={os.getuid()}: a real write-only file raises PermissionError")
+              else:
+                  raise AssertionError("Permission fixture did not deny the read")
+              finally:
+                  path.chmod(0o600)
+          PY
+      - name: Install Rust
+        run: |
+          rustup toolchain install 1.100.0 --profile minimal --no-self-update --component clippy --component rustfmt
+          rustup default 1.100.0
+          rustc --version
+      - name: Verify format
+        run: cargo fmt --all --check
+      - name: Reproduce lost conversations and links without the fix
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import pathlib
+          import subprocess
+          path = pathlib.Path("crates/engine/src/feed.rs")
+          current = path.read_text()
+          previous = subprocess.check_output(["git", "show", "df2270904c36d6904883ba4442fb80fb383ed350:crates/engine/src/feed.rs"], text=True)
+          marker = "#[cfg(test)]\nmod tests {"
+          assert current.count(marker) == previous.count(marker) == 1
+          path.write_text(previous.split(marker)[0] + marker + current.split(marker)[1])
+          PY
+          trap 'git restore -- crates/engine/src/feed.rs' EXIT
+          set +e
+          cargo test --locked -j 2 -p craft-anything-engine --lib feed::tests:: -- --nocapture --test-threads=1 > "$RUNNER_TEMP/craft-feed-baseline.log" 2>&1
+          result=$?
+          set -e
+          cat "$RUNNER_TEMP/craft-feed-baseline.log"
+          git restore -- crates/engine/src/feed.rs
+          trap - EXIT
+          test "$result" -eq 101
+          python3 - <<'PY'
+          import os
+          import pathlib
+          text = (pathlib.Path(os.environ["RUNNER_TEMP"]) / "craft-feed-baseline.log").read_text()
+          assert "test result: FAILED. 7 passed; 5 failed;" in text, "expected exactly five real regressions"
+          assert "permission test skipped" not in text
+          for name in [
+              "save_keeps_an_unreadable_feed",
+              "save_keeps_an_unreadable_newer_feed",
+              "record_answer_keeps_an_unreadable_feed_and_can_retry",
+              "save_leaves_a_dangling_feed_symlink",
+              "save_leaves_a_looping_feed_symlink",
+          ]:
+              assert f"    feed::tests::{name}\n" in text, name
+          PY
+      - name: Run fixed conversation regressions and compatibility controls
+        shell: bash
+        run: |
+          cargo test --locked -j 2 -p craft-anything-engine --lib feed::tests:: -- --nocapture --test-threads=1 2>&1 | tee "$RUNNER_TEMP/craft-feed-fixed.log"
+          python3 - <<'PY'
+          import os
+          import pathlib
+          text = (pathlib.Path(os.environ["RUNNER_TEMP"]) / "craft-feed-fixed.log").read_text()
+          assert "test result: ok. 12 passed; 0 failed;" in text
+          assert "permission test skipped" not in text
+          PY
+      - name: Full engine test suite
+        shell: bash
+        run: cargo test --locked -j 2 -p craft-anything-engine -- --test-threads=2
+      - name: Engine clippy
+        run: cargo clippy --locked -j 2 -p craft-anything-engine --all-targets -- -D warnings
+      - name: Architecture and source gates
+        run: |
+          cargo xtask layers
+          cargo xtask locks
+          cargo xtask secrets
+      - name: Verify clean exact source
+        run: |
+          test "$(git rev-parse HEAD)" = "$SOURCE_SHA"
+          cargo fmt --all --check
+          git diff --exit-code
+          git diff --check
