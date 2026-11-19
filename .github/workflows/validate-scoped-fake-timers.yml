@@ -9,7 +9,7 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     env:
-      SOURCE_SHA: 153953efa2bfeedeb706ea865dfe33e29164b185
+      SOURCE_SHA: 61740f1531ac6368324cab7ca4db777c7c6e6004
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
@@ -17,7 +17,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           repository: Afloat16/landmines
-          ref: 153953efa2bfeedeb706ea865dfe33e29164b185
+          ref: 61740f1531ac6368324cab7ca4db777c7c6e6004
           path: source
           fetch-depth: 0
           persist-credentials: false
@@ -42,13 +42,26 @@ jobs:
             git diff
             exit 1
           fi
+      - name: Reproduce nested step regressions in the earlier candidate
+        working-directory: source
+        shell: bash
+        run: |
+          git show 153953efa2bfeedeb706ea865dfe33e29164b185:packages/landmines/src/rules/no-fixed-sleep.ts > packages/landmines/src/rules/no-fixed-sleep.ts
+          trap 'git restore -- packages/landmines/src/rules/no-fixed-sleep.ts' EXIT
+          set +e
+          bun run --cwd packages/landmines test src/rules/no-fixed-sleep.test.ts --reporter=json --outputFile="$RUNNER_TEMP/step-regression.json"
+          status=$?
+          set -e
+          git restore -- packages/landmines/src/rules/no-fixed-sleep.ts
+          trap - EXIT
+          test "$status" -eq 1
+          python3 -c 'import json,os; d=json.load(open(os.environ["RUNNER_TEMP"]+"/step-regression.json")); print({k:d[k] for k in ["numTotalTests","numPassedTests","numFailedTests","numPendingTests"]}); assert d["numFailedTests"] == 7 and d["numPassedTests"] == 62 and d["numPendingTests"] == 0; failed=[a for s in d["testResults"] for a in s["assertionResults"] if a["status"] == "failed"]; assert len(failed)==7 and all("test.step" in a["fullName"] for a in failed)'
       - name: Reproduce mixed timer regressions on unchanged main
         working-directory: source
         shell: bash
         run: |
           git show 79e91992952c14b0c217b403fa416024c1929afe:packages/landmines/src/rules/no-fixed-sleep.ts > packages/landmines/src/rules/no-fixed-sleep.ts
           trap 'git restore -- packages/landmines/src/rules/no-fixed-sleep.ts' EXIT
-          python3 ../validation/mixed-timers.py 0
           set +e
           bun run --cwd packages/landmines test src/rules/no-fixed-sleep.test.ts --reporter=json --outputFile="$RUNNER_TEMP/mixed-timers-baseline.json"
           status=$?
@@ -56,7 +69,7 @@ jobs:
           git restore -- packages/landmines/src/rules/no-fixed-sleep.ts
           trap - EXIT
           test "$status" -eq 1
-          python3 -c 'import json,os; d=json.load(open(os.environ["RUNNER_TEMP"]+"/mixed-timers-baseline.json")); print({k:d[k] for k in ["numTotalTests","numPassedTests","numFailedTests","numPendingTests"]}); assert d["numFailedTests"] == 10 and d["numPendingTests"] == 0; failed=[a for s in d["testResults"] for a in s["assertionResults"] if a["status"] == "failed"]; assert len(failed)==10 and all("mixed" in a["fullName"] for a in failed)'
+          python3 -c 'import json,os; d=json.load(open(os.environ["RUNNER_TEMP"]+"/mixed-timers-baseline.json")); print({k:d[k] for k in ["numTotalTests","numPassedTests","numFailedTests","numPendingTests"]}); assert d["numFailedTests"] == 11 and d["numPassedTests"] == 58 and d["numPendingTests"] == 0; failed=[a for s in d["testResults"] for a in s["assertionResults"] if a["status"] == "failed"]; assert len(failed)==11 and all("mixed" in a["fullName"] or "keeps test.each" in a["fullName"] for a in failed)'
       - name: Run the fixed rule and complete repository suite
         working-directory: source
         run: |
