@@ -5,9 +5,10 @@ import subprocess
 import tempfile
 
 root = Path.cwd()
-runner = root / "node_modules/.bin/vitest"
+package = root / "packages/landmines"
+runner = package / "node_modules/.bin/vitest"
 assert runner.is_file(), runner
-with tempfile.TemporaryDirectory(prefix=".environment-probe-", dir=root) as folder:
+with tempfile.TemporaryDirectory(prefix=".environment-probe-", dir=package) as folder:
     probe = Path(folder)
     (probe / "vitest.config.mjs").write_text(
         'export default { test: { environment: "node", include: ["*.test.mjs"] } };\n'

@@ -9,7 +9,7 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     env:
-      SOURCE_SHA: 129da6045de80b97eda9c58ae420b83733ce1079
+      SOURCE_SHA: 05b395411773030461781a3fcc9372b65d9fdf58
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
@@ -17,7 +17,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           repository: Afloat16/landmines
-          ref: 129da6045de80b97eda9c58ae420b83733ce1079
+          ref: 05b395411773030461781a3fcc9372b65d9fdf58
           path: source
           fetch-depth: 0
           persist-credentials: false
@@ -44,7 +44,7 @@ jobs:
           git show 79e91992952c14b0c217b403fa416024c1929afe:packages/landmines/src/rules/no-comments.ts > packages/landmines/src/rules/no-comments.ts
           trap 'git restore -- packages/landmines/src/rules/no-comments.ts' EXIT
           set +e
-          node_modules/.bin/vitest run packages/landmines/src/rules/no-comments.test.ts --reporter=json --outputFile="$RUNNER_TEMP/environment-baseline.json"
+          bun run --cwd packages/landmines test src/rules/no-comments.test.ts --reporter=json --outputFile="$RUNNER_TEMP/environment-baseline.json"
           status=$?
           set -e
           git restore -- packages/landmines/src/rules/no-comments.ts
