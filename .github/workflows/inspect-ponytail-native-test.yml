@@ -25,3 +25,6 @@ jobs:
           /tmp/ponytail-native-test-cli/node_modules/.bin/claude --version
           /tmp/ponytail-native-test-cli/node_modules/.bin/claude plugin --help
           /tmp/ponytail-native-test-cli/node_modules/.bin/claude plugin test --help
+      - name: Run the existing native plugin tests
+        shell: bash
+        run: /tmp/ponytail-native-test-cli/node_modules/.bin/claude plugin test
