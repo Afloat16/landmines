@@ -1,0 +1,74 @@
+name: Validate Ponytail hide control in the native plugin runner
+on:
+  push:
+    branches: [validation/ponytail-hide-control-20261120]
+permissions:
+  contents: read
+jobs:
+  check:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          repository: Afloat16/ponytail
+          ref: f46ebd2ee68d2a2c68306bb377e403ff330a3557
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version: 24
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: '3.12'
+      - name: Install native test runner and benchmark dependency
+        run: |
+          npm install --prefix /tmp/ponytail-native-test-cli --no-save @anthropic-ai/claude-code@2.1.325
+          python3 -m pip install pandas
+          /tmp/ponytail-native-test-cli/node_modules/.bin/claude --version
+      - name: Prove the missing hide control on main
+        shell: bash
+        run: |
+          mv tests/band.test.tsx /tmp/ponytail-original-band.test.tsx
+          git show 96608e078b2d5ea607c5c3b8b5a54d1c1fba6846:hooks/band/register.tsx > hooks/band/register.tsx
+          set +e
+          /tmp/ponytail-native-test-cli/node_modules/.bin/claude plugin test > /tmp/ponytail-hide-baseline.log 2>&1
+          result=$?
+          set -e
+          cat /tmp/ponytail-hide-baseline.log
+          git restore hooks/band/register.tsx
+          mv /tmp/ponytail-original-band.test.tsx tests/band.test.tsx
+          test "$result" -eq 1
+          node -e 'const s=require("node:fs").readFileSync("/tmp/ponytail-hide-baseline.log","utf8"); if(!s.includes("0 pass") || !s.includes("5 fail") || !s.includes("Ran 5 tests")) throw new Error("unexpected baseline results");'
+      - name: Validate all five new native UI cases
+        shell: bash
+        run: |
+          mv tests/band.test.tsx /tmp/ponytail-original-band.test.tsx
+          set +e
+          /tmp/ponytail-native-test-cli/node_modules/.bin/claude plugin test > /tmp/ponytail-hide-fixed.log 2>&1
+          result=$?
+          set -e
+          cat /tmp/ponytail-hide-fixed.log
+          mv /tmp/ponytail-original-band.test.tsx tests/band.test.tsx
+          test "$result" -eq 0
+          node -e 'const s=require("node:fs").readFileSync("/tmp/ponytail-hide-fixed.log","utf8"); if(!s.includes("5 pass") || !s.includes("0 fail") || !s.includes("Ran 5 tests")) throw new Error("unexpected fixed results");'
+      - name: Compare the full native suite with its two known baseline failures
+        shell: bash
+        run: |
+          set +e
+          /tmp/ponytail-native-test-cli/node_modules/.bin/claude plugin test > /tmp/ponytail-native-all.log 2>&1
+          result=$?
+          set -e
+          cat /tmp/ponytail-native-all.log
+          test "$result" -eq 1
+          node -e 'const s=require("node:fs").readFileSync("/tmp/ponytail-native-all.log","utf8"); const failed=s.split("\n").filter(l=>l.startsWith("(fail)")); const names=["the row takes bodyColumns only in the terminal, where a Button is as wide as its cells","the details view has its line without empty rows, and off the terminal its columns share the row"]; if(!s.includes("35 pass") || !s.includes("2 fail") || failed.length!==2 || failed.some(l=>!names.some(n=>l.includes(n)))) throw new Error("native baseline changed");'
+      - name: Repository required checks
+        run: |
+          npm test
+          node scripts/check-rule-copies.js
+          node scripts/check-versions.js
+          python3 benchmarks/agentic/run.py --selftest
+      - name: Verify clean source
+        run: |
+          git diff --exit-code
+          git diff --check
