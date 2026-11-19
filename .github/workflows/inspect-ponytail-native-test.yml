@@ -1,0 +1,27 @@
+name: Inspect Ponytail native plugin test entry point
+on:
+  push:
+    branches: [validation/ponytail-native-test-entry-20261120]
+permissions:
+  contents: read
+jobs:
+  inspect:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          repository: Afloat16/ponytail
+          ref: 96608e078b2d5ea607c5c3b8b5a54d1c1fba6846
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version: 24
+      - name: Install the version reported by the issue
+        run: npm install --prefix /tmp/ponytail-native-test-cli --no-save @anthropic-ai/claude-code@2.1.325
+      - name: Read CLI test entry-point help
+        shell: bash
+        run: |
+          /tmp/ponytail-native-test-cli/node_modules/.bin/claude --version
+          /tmp/ponytail-native-test-cli/node_modules/.bin/claude plugin --help
+          /tmp/ponytail-native-test-cli/node_modules/.bin/claude plugin test --help
