@@ -17,7 +17,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           repository: Afloat16/craft-anything
-          ref: 87a4e3c916ff4505f47c46d55a252bddc9de365c
+          ref: a12323c86347bd320eb80d40fbeaf23c7f7df1b7
           fetch-depth: 0
           persist-credentials: false
       - name: Install Rust
