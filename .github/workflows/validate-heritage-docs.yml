@@ -1,0 +1,48 @@
+name: Validate public heritage documentation
+on:
+  push:
+    branches: [validation/landmines-heritage-docs-20261120]
+permissions:
+  contents: read
+jobs:
+  check:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          repository: Afloat16/landmines
+          ref: d3b91c3bc3242086ab3976943fc1807ffa5c6a81
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
+        with:
+          bun-version: 1.4.3
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version: 24
+      - run: bun install --frozen-lockfile
+      - name: Prove new public-contract regressions on main
+        shell: bash
+        run: |
+          git show 79e91992952c14b0c217b403fa416024c1929afe:packages/landmines/src/rules/no-comments.ts > packages/landmines/src/rules/no-comments.ts
+          set +e
+          bun run --cwd packages/landmines test src/rules/no-comments.test.ts --reporter=json --outputFile=/tmp/heritage-baseline.json
+          result=$?
+          set -e
+          git restore packages/landmines/src/rules/no-comments.ts
+          test "$result" -eq 1
+          node -e 'const r=require("/tmp/heritage-baseline.json"); const failed=r.testResults.flatMap(s=>s.assertionResults).filter(t=>t.status==="failed"); if(r.numFailedTests!==8 || failed.some(t=>!t.fullName.includes("preserves public heritage contract documentation"))) throw new Error(JSON.stringify(r)); console.log(JSON.stringify({failed:r.numFailedTests,passed:r.numPassedTests,failures:failed.map(t=>t.fullName)},null,2));'
+      - name: Format check
+        shell: bash
+        run: |
+          if ! bun run format:check; then
+            bun run format
+            git diff
+            exit 1
+          fi
+      - run: bun run lint
+      - run: bun run typecheck
+      - run: bun run build
+      - run: bun run test
+      - run: git diff --exit-code
