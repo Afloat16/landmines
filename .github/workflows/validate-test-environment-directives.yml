@@ -9,7 +9,7 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     env:
-      SOURCE_SHA: 05b395411773030461781a3fcc9372b65d9fdf58
+      SOURCE_SHA: 912a013b0e86ad765425314e856cdab92e33c907
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
@@ -17,7 +17,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           repository: Afloat16/landmines
-          ref: 05b395411773030461781a3fcc9372b65d9fdf58
+          ref: 912a013b0e86ad765425314e856cdab92e33c907
           path: source
           fetch-depth: 0
           persist-credentials: false

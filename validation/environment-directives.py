@@ -13,16 +13,19 @@ with tempfile.TemporaryDirectory(prefix=".environment-probe-", dir=package) as f
     (probe / "vitest.config.mjs").write_text(
         'export default { test: { environment: "node", include: ["*.test.mjs"] } };\n'
     )
-    (probe / "environment.mjs").write_text(
+    environment = probe / "node_modules/vitest-environment-directive-probe"
+    environment.mkdir(parents=True)
+    (environment / "package.json").write_text(json.dumps({"name": "vitest-environment-directive-probe", "type": "module", "main": "index.mjs"}))
+    (environment / "index.mjs").write_text(
         'export default { name: "directive-probe", viteEnvironment: "ssr",\n'
         'setup(global, options) { global.environmentProbe = options;\n'
         'return { teardown() { delete global.environmentProbe; } }; } };\n'
     )
     bodies = {}
     forms = [
-        ("vitest-line", "// @vitest-environment ./environment.mjs\n// @vitest-environment-options {\"value\": 21}\n", 21),
-        ("vitest-block", "/**\n * @vitest-environment ./environment.mjs\n * @vitest-environment-options {\"value\": 22}\n */\n", 22),
-        ("jest-block", "/**\n * @jest-environment ./environment.mjs\n * @jest-environment-options {\"value\": 23}\n */\n", 23),
+        ("vitest-line", "// @vitest-environment directive-probe\n// @vitest-environment-options {\"value\": 21}\n", 21),
+        ("vitest-block", "/**\n * @vitest-environment directive-probe\n * @vitest-environment-options {\"value\": 22}\n */\n", 22),
+        ("jest-block", "/**\n * @jest-environment directive-probe\n * @jest-environment-options {\"value\": 23}\n */\n", 23),
     ]
     for name, directive, value in forms:
         file = probe / f"{name}.test.mjs"
@@ -47,6 +50,12 @@ with tempfile.TemporaryDirectory(prefix=".environment-probe-", dir=package) as f
         data = json.loads(report.read_text())
         summary = {key: data[key] for key in ["numTotalTests", "numPassedTests", "numFailedTests", "numPendingTests"]}
         print(name, json.dumps(summary), flush=True)
+        if data["numFailedTests"] != failures:
+            for suite in data["testResults"]:
+                print(suite.get("message", ""), flush=True)
+                for result in suite.get("assertionResults", []):
+                    if result["status"] == "failed":
+                        print(result["fullName"], result.get("failureMessages", []), flush=True)
         assert data["numTotalTests"] == 3
         assert data["numFailedTests"] == failures
         assert data["numPassedTests"] == 3 - failures
