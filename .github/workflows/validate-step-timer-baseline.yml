@@ -1,0 +1,49 @@
+name: Reproduce nested step timer scope regression
+on:
+  push:
+    branches: [validation/scoped-step-baseline-20261120]
+permissions:
+  contents: read
+jobs:
+  check:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          repository: Afloat16/landmines
+          ref: 6ffd82e64a288a145e1b8e3a0c4a347b01aaaca6
+          path: source
+          persist-credentials: false
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
+        with:
+          bun-version: 1.4.3
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version: 24
+      - name: Install locked source dependencies
+        working-directory: source
+        run: |
+          test "$(git rev-parse HEAD)" = 6ffd82e64a288a145e1b8e3a0c4a347b01aaaca6
+          node --version
+          bun --version
+          bun install --frozen-lockfile
+      - name: Reproduce the six nested step regressions through real Oxlint
+        working-directory: source
+        shell: bash
+        run: |
+          bun run format:check
+          set +e
+          bun run --cwd packages/landmines test src/rules/no-fixed-sleep.test.ts --reporter=json --outputFile="$RUNNER_TEMP/step-baseline.json"
+          status=$?
+          set -e
+          test "$status" -eq 1
+          python3 -c 'import json,os; d=json.load(open(os.environ["RUNNER_TEMP"]+"/step-baseline.json")); print({k:d[k] for k in ["numTotalTests","numPassedTests","numFailedTests","numPendingTests"]}); assert d["numFailedTests"] == 6 and d["numPassedTests"] == 62 and d["numPendingTests"] == 0; failed=[a for s in d["testResults"] for a in s["assertionResults"] if a["status"] == "failed"]; print([a["fullName"] for a in failed]); assert len(failed)==6 and all("test.step" in a["fullName"] for a in failed)' 
+      - name: Verify source remains unchanged
+        working-directory: source
+        run: |
+          git diff --exit-code
+          git diff --check
