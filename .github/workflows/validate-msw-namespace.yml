@@ -15,8 +15,8 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           repository: Afloat16/landmines
-          ref: 16105cdc282ff564214edbf235bd4d6aa5844ebd
-          fetch-depth: 2
+          ref: 805e829c92f171841de6aab362b3dae3004931d3
+          fetch-depth: 0
           persist-credentials: false
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
         with:
