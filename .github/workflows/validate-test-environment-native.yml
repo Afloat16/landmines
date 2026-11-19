@@ -1,0 +1,43 @@
+name: Verify native test environment directive semantics
+on:
+  push:
+    branches: [validation/test-environment-native-20261120]
+permissions:
+  contents: read
+jobs:
+  native:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    env:
+      SOURCE_SHA: 05b395411773030461781a3fcc9372b65d9fdf58
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          repository: Afloat16/landmines
+          ref: 05b395411773030461781a3fcc9372b65d9fdf58
+          path: source
+          persist-credentials: false
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
+        with:
+          bun-version: 1.4.3
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version: 24
+      - name: Install locked workspace dependencies
+        working-directory: source
+        run: |
+          test "$(git rev-parse HEAD)" = "$SOURCE_SHA"
+          bun install --frozen-lockfile
+      - name: Native runner selection and removed-directive controls
+        working-directory: source
+        run: python3 ../validation/environment-directives.py
+      - name: Verify exact source remains clean
+        if: always()
+        working-directory: source
+        run: |
+          test "$(git rev-parse HEAD)" = "$SOURCE_SHA"
+          git diff --exit-code
+          git diff --check
