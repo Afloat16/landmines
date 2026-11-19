@@ -15,7 +15,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           repository: Afloat16/landmines
-          ref: d0f99c4c24b638239569cc9d5d4a74b6bf913291
+          ref: 5f92b48077155c88b5fcc3769650bfcccc5e4007
           fetch-depth: 0
           persist-credentials: false
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
@@ -25,17 +25,17 @@ jobs:
         with:
           node-version: 24
       - run: bun install --frozen-lockfile
-      - name: Prove binding regressions fail on unchanged production code
+      - name: Prove supported framework regressions fail on previous PR head
         shell: bash
         run: |
-          git show 79e91992952c14b0c217b403fa416024c1929afe:packages/landmines/src/rules/no-unsignaled-poll.ts > packages/landmines/src/rules/no-unsignaled-poll.ts
+          git show d0f99c4c24b638239569cc9d5d4a74b6bf913291:packages/landmines/src/rules/no-unsignaled-poll.ts > packages/landmines/src/rules/no-unsignaled-poll.ts
           set +e
           bun run --cwd packages/landmines test src/rules/no-unsignaled-poll.test.ts --reporter=json --outputFile=/tmp/poll-baseline.json
           result=$?
           set -e
           git checkout -- packages/landmines/src/rules/no-unsignaled-poll.ts
           test "$result" -eq 1
-          node -e 'const r=require("/tmp/poll-baseline.json"); const failed=r.testResults.flatMap(s=>s.assertionResults).filter(t=>t.status==="failed"); if(r.numFailedTests!==10 || failed.some(t=>!t.fullName.includes("named import aliases") && !t.fullName.includes("shadowed bindings"))) throw new Error(JSON.stringify(r)); console.log(JSON.stringify({failed:r.numFailedTests,passed:r.numPassedTests,failures:failed.map(t=>t.fullName)},null,2));'
+          node -e 'const r=require("/tmp/poll-baseline.json"); const failed=r.testResults.flatMap(s=>s.assertionResults).filter(t=>t.status==="failed"); if(r.numFailedTests!==8 || failed.some(t=>!t.fullName.includes("known framework imports"))) throw new Error(JSON.stringify(r)); console.log(JSON.stringify({failed:r.numFailedTests,passed:r.numPassedTests,failures:failed.map(t=>t.fullName)},null,2));'
       - name: Format check
         shell: bash
         run: |
