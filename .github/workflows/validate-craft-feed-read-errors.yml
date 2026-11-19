@@ -14,12 +14,12 @@ jobs:
       CARGO_PROFILE_DEV_DEBUG: 0
       CARGO_PROFILE_TEST_DEBUG: 0
       CARGO_TARGET_DIR: target/agent-feed-save
-      SOURCE_SHA: 25bc4982a97dc1c516996ef82cabb59d3395b6ac
+      SOURCE_SHA: 1debba401224ce4f94d64db84826baf89e184da6
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           repository: Afloat16/craft-anything
-          ref: 25bc4982a97dc1c516996ef82cabb59d3395b6ac
+          ref: 1debba401224ce4f94d64db84826baf89e184da6
           fetch-depth: 0
           persist-credentials: false
       - name: Verify exact source and real permission enforcement
