@@ -1,0 +1,67 @@
+name: Validate folder entry fixtures on Linux and macOS
+on:
+  push:
+    branches: [validation/craft-entry-portability-20261120]
+permissions:
+  contents: read
+jobs:
+  check:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, macos-15]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    env:
+      CARGO_TERM_COLOR: never
+      CARGO_INCREMENTAL: 0
+      CARGO_PROFILE_DEV_DEBUG: 0
+      CARGO_PROFILE_TEST_DEBUG: 0
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          repository: Afloat16/craft-anything
+          ref: 34ed17f30e5519bb00ee0e6055c977a6e8688e52
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Install Rust
+        run: |
+          rustup toolchain install 1.100.0 --profile minimal --no-self-update --component clippy --component rustfmt
+          rustup default 1.100.0
+          rustc --version
+      - name: Verify format
+        run: cargo fmt --all --check
+      - name: Reproduce macOS fixture failure at prior PR head
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          git show a12323c86347bd320eb80d40fbeaf23c7f7df1b7:crates/engine/src/tools/artifact_tools.rs > crates/engine/src/tools/artifact_tools.rs
+          set +e
+          cargo test --locked -j 2 -p craft-anything-engine --lib non_utf8_entry_names_ -- --nocapture > fixture-baseline.log 2>&1
+          result=$?
+          set -e
+          cat fixture-baseline.log
+          git restore crates/engine/src/tools/artifact_tools.rs
+          test "$result" -eq 101
+          node -e 'const s=require("node:fs").readFileSync("fixture-baseline.log","utf8"); if(!s.includes("test result: FAILED. 1 passed; 2 failed;")) throw new Error("expected exactly two fixture failures");'
+      - name: Run entry-name and artifact-tool coverage
+        shell: bash
+        run: |
+          cargo test --locked -j 2 -p craft-anything-engine --lib non_utf8_entry_names_ -- --nocapture 2>&1 | tee fixture-fixed.log
+          node -e 'const s=require("node:fs").readFileSync("fixture-fixed.log","utf8"); const n=process.platform==="darwin"?1:3; if(!s.includes("test result: ok. "+n+" passed; 0 failed;")) throw new Error("entry-name test count changed");'
+          cargo test --locked -j 2 -p craft-anything-engine --lib tools::artifact_tools:: -- --test-threads=2
+      - name: Full Engine tests on Linux
+        if: runner.os == 'Linux'
+        run: cargo test --locked -j 2 -p craft-anything-engine --no-fail-fast -- --test-threads=2
+      - name: Engine clippy
+        run: cargo clippy --locked -j 2 -p craft-anything-engine --all-targets -- -D warnings
+      - name: Architecture and source gates
+        run: |
+          cargo xtask layers
+          cargo xtask locks
+          cargo xtask secrets
+      - name: Verify clean source
+        run: |
+          cargo fmt --all --check
+          git diff --exit-code
+          git diff --check
